@@ -23,6 +23,9 @@ def transform_transaction_data(raw_data):
 
     # Split the raw data into lines
     lines = raw_data.split('\n')
+    
+    # Exclude the first 4 rows
+    lines = lines[4:]
 
     current_date = None
 
@@ -36,30 +39,27 @@ def transform_transaction_data(raw_data):
         if date_match:
             current_date = date_match.group()
 
-        # Extract all amount-code pairs from the line
-        amounts_codes = re.findall(r'([-]?\d+(?:,\d{3})*(?:\.\d{2})?)\s*(\w{2,3})', line)
-
-        for amount, code in amounts_codes:
-            if code:  # Include all codes
+        # Extract debit transactions
+        debit_matches = re.findall(r'(\d+(?:,\d{3})*(?:\.\d{2})?)\s*([A-Z]{2,3})', line)
+        for amount, code in debit_matches:
+            if code not in ['LUR', 'FA', 'AS', 'QC', 'TC', 'RM', 'TX', 'DP', 'FT']:  # Exclude credit codes
                 # Remove commas from amount and convert to float
                 amount = float(amount.replace(',', ''))
-
                 dates.append(current_date)
                 codes.append(code)
+                types.append('DEBIT')
+                amounts.append(amount)
 
-                # Determine transaction type based on code
-                if code in ['LCP', 'BF', 'BT', 'CP', 'DA', 'ET', 'ES', 'TM']:
-                    trans_type = 'DEBIT'
-                elif code in ['LUR', 'FA', 'AS', 'QC', 'TC', 'RM', 'TX', 'DP', 'FT']:
-                    trans_type = 'CREDIT'
-                else:
-                    continue  # Skip unknown transaction types
-
-                types.append(trans_type)
-
-                # Adjust amount sign based on transaction type
-                final_amount = amount if trans_type == 'DEBIT' else -amount
-                amounts.append(final_amount)
+        # Extract credit transactions
+        credit_matches = re.findall(r'([A-Z]{2,3})\s*(\d+(?:,\d{3})*(?:\.\d{2})?)', line)
+        for code, amount in credit_matches:
+            if code in ['LUR', 'FA', 'AS', 'QC', 'TC', 'RM', 'TX', 'DP', 'FT']:  # Include only credit codes
+                # Remove commas from amount and convert to float
+                amount = float(amount.replace(',', ''))
+                dates.append(current_date)
+                codes.append(code)
+                types.append('CREDIT')
+                amounts.append(amount)
 
         # Extract balance information
         balance_match = re.search(r'(\d{3}-\d)\s+"?([-0-9,\.]+)"?\s+"?([-0-9,\.]+)"?\s+"?([-0-9,\.]+)"?\s+"?([-0-9,\.]+)"?', line)
