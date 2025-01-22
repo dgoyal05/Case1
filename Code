@@ -37,7 +37,7 @@ def transform_transaction_data(raw_data):
             current_date = date_match.group()
 
         # Extract all amount-code pairs from the line
-        amounts_codes = re.findall(r'([-]?\d+(?:,\d{3})*(?:\.\d{2})?)\s+(\w{2,3})', line)
+        amounts_codes = re.findall(r'([-]?\d+(?:,\d{3})*(?:\.\d{2})?)\s*(\w{2,3})', line)
 
         for amount, code in amounts_codes:
             if code:  # Include all codes
@@ -47,8 +47,14 @@ def transform_transaction_data(raw_data):
                 dates.append(current_date)
                 codes.append(code)
 
-                # Determine transaction type based on position in report
-                trans_type = 'DEBIT' if 'DEBIT' in line else 'CREDIT'
+                # Determine transaction type based on code
+                if code in ['LCP', 'BF', 'BT', 'CP', 'DA', 'ET', 'ES', 'TM']:
+                    trans_type = 'DEBIT'
+                elif code in ['LUR', 'FA', 'AS', 'QC', 'TC', 'RM', 'TX', 'DP', 'FT']:
+                    trans_type = 'CREDIT'
+                else:
+                    continue  # Skip unknown transaction types
+
                 types.append(trans_type)
 
                 # Adjust amount sign based on transaction type
@@ -65,6 +71,13 @@ def transform_transaction_data(raw_data):
                 'Net Activity': balance_match.group(4),
                 'Closing Balance': balance_match.group(5)
             })
+
+    # Ensure all lists are of the same length
+    min_length = min(len(dates), len(codes), len(types), len(amounts))
+    dates = dates[:min_length]
+    codes = codes[:min_length]
+    types = types[:min_length]
+    amounts = amounts[:min_length]
 
     # Create DataFrame for transactions
     df_transactions = pd.DataFrame({
