@@ -1,0 +1,102 @@
+import pandas as pd
+import re
+from google.colab import files
+import io
+
+def transform_transaction_data(raw_data):
+    """
+    Transform raw transaction data into a structured format.
+
+    Parameters:
+    raw_data (str): Raw transaction data text from the report
+
+    Returns:
+    pandas.DataFrame: Structured transaction data with Date, Transaction Code,
+                     Transaction Type, and Amount columns
+    """
+    # Create lists to store the parsed data
+    dates = []
+    codes = []
+    types = []
+    amounts = []
+    balances = []
+
+    # Split the raw data into lines
+    lines = raw_data.split('\n')
+
+    current_date = None
+
+    for line in lines:
+        # Skip header lines and empty lines
+        if not line.strip() or 'CH/BR' in line:
+            continue
+
+        # Extract date if present
+        date_match = re.search(r'\d{2}/\d{2}/\d{2}', line)
+        if date_match:
+            current_date = date_match.group()
+
+        # Extract all amount-code pairs from the line
+        amounts_codes = re.findall(r'([-]?\d+(?:,\d{3})*(?:\.\d{2})?)\s+(\w{2,3})', line)
+
+        for amount, code in amounts_codes:
+            if code:  # Include all codes
+                # Remove commas from amount and convert to float
+                amount = float(amount.replace(',', ''))
+
+                dates.append(current_date)
+                codes.append(code)
+
+                # Determine transaction type based on position in report
+                trans_type = 'DEBIT' if 'DEBIT' in line else 'CREDIT'
+                types.append(trans_type)
+
+                # Adjust amount sign based on transaction type
+                final_amount = amount if trans_type == 'DEBIT' else -amount
+                amounts.append(final_amount)
+
+        # Extract balance information
+        balance_match = re.search(r'(\d{3}-\d)\s+"?([-0-9,\.]+)"?\s+"?([-0-9,\.]+)"?\s+"?([-0-9,\.]+)"?\s+"?([-0-9,\.]+)"?', line)
+        if balance_match:
+            balances.append({
+                'Charter': balance_match.group(1),
+                'Previous Balance': balance_match.group(2),
+                'Opening Balance': balance_match.group(3),
+                'Net Activity': balance_match.group(4),
+                'Closing Balance': balance_match.group(5)
+            })
+
+    # Create DataFrame for transactions
+    df_transactions = pd.DataFrame({
+        'Date': dates,
+        'Transaction Code': codes,
+        'Transaction Type': types,
+        'Amount': amounts
+    })
+
+    # Filter out None dates and sort by date
+    df_transactions = df_transactions.dropna(subset=['Date'])
+    df_transactions = df_transactions.sort_values('Date')
+
+    # Create DataFrame for balances
+    df_balances = pd.DataFrame(balances)
+
+    return df_transactions, df_balances
+
+# Upload and process file
+print("Please upload your text file...")
+uploaded = files.upload()
+
+# Process the uploaded file
+for filename in uploaded.keys():
+    content = uploaded[filename].decode('utf-8')
+    df_transactions, df_balances = transform_transaction_data(content)
+    print("\nProcessed Data:")
+    print(df_transactions)
+    print("\nBalance Data:")
+    print(df_balances)
+
+    # Save to CSV if needed
+    df_transactions.to_csv('structured_transactions.csv', index=False)
+    df_balances.to_csv('balances.csv', index=False)
+    print("\nData has been saved to 'structured_transactions.csv' and 'balances.csv'")
